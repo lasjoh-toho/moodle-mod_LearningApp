@@ -16,6 +16,14 @@ if ($ADMIN->fulltree) {
         0
     ));
 
+    $settings->add(new admin_setting_configtext(
+        'mod_learningapp/local_storage_max_size_mb',
+        get_string('localstoragemaxsize', 'mod_learningapp'),
+        get_string('localstoragemaxsize_desc', 'mod_learningapp'),
+        15,
+        PARAM_INT
+    ));
+
     $settings->add(new admin_setting_configcheckbox(
         'mod_learningapp/enable_html_download',
         get_string('enablehtmldownload', 'mod_learningapp'),

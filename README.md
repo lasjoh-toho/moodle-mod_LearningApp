@@ -14,16 +14,23 @@ Vollbild-/Zoom-Player und Anbindung an das Moodle-Notenbuch.
   *Website-Administration → Plugins → Aktivitäten → LearningApp* die Option
   „Lokale Wiederverwendung erlauben“ aktivieren. Ist sie aktiv, können
   Lehrkräfte je Aktivität „App-Daten lokal in Moodle speichern“ wählen.
-  Moodle lädt dann einen Schnappschuss der App-Ressourcen herunter und
-  speichert ihn im Moodle-Dateisystem (`classes/local/storage_manager.php`,
-  ausgeliefert über `pluginfile.php`).
+  Moodle lädt dann einen Schnappschuss der App herunter und bettet dabei
+  Bilder, Audio, Video und Schriftarten direkt als Base64-Data-URIs ein;
+  Skripte und Stylesheets werden inline übernommen. Das Ergebnis ist eine
+  einzelne, eigenständige `snapshot.html`-Datei im Moodle-Dateisystem
+  (`classes/local/storage_manager.php`, ausgeliefert über `pluginfile.php`).
+  Die maximale Gesamtgröße der eingebetteten Medien pro Aktivität lässt
+  sich unter „Maximale Größe eingebetteter Medien (MB)“ einstellen
+  (Standard: 15 MB) — größere oder zusätzliche Ressourcen werden
+  übersprungen und bleiben als externer Link bestehen.
 
   > **Hinweis:** learningapps.org bietet keine offizielle Export-Schnittstelle.
-  > Der lokale Schnappschuss ist ein Best-Effort-Mirror aus HTML-Markup und
-  > gleichnamigen JS/CSS-Assets. Stark dynamische Apps, die Inhalte erst zur
-  > Laufzeit vom Server nachladen, lassen sich damit nicht immer vollständig
-  > offline darstellen — in diesem Fall bindet das Modul automatisch wieder
-  > die externe Quelle ein.
+  > Der lokale Schnappschuss ist ein Best-Effort-Mirror: Bilder/Medien/CSS/JS,
+  > die direkt im HTML referenziert werden, werden eingebettet. Stark
+  > dynamische Apps, die Inhalte erst zur Laufzeit per JavaScript vom Server
+  > nachladen (z. B. Übungsdaten per API-Aufruf), lassen sich damit nicht
+  > vollständig offline darstellen — in diesem Fall bindet das Modul
+  > automatisch wieder die externe Quelle ein.
 - **Player mit Vollbild & Zoom**: `view.php` rendert die App in einem
   responsiven iFrame mit echten Vollbild- (`Fullscreen API`) sowie
   Zoom+/Zoom-/Zoom-Reset-Buttons (CSS `transform: scale(...)`,

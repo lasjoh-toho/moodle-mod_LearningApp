@@ -40,8 +40,10 @@ $string['grademax_help'] = 'The number of points recorded in the gradebook once 
 $string['grademaxpositive'] = 'The maximum grade must be greater than 0.';
 
 $string['storelocally'] = 'Store app data locally in Moodle';
-$string['storelocally_help'] = 'When enabled, Moodle downloads the app content once and stores a local copy in the course file storage. This keeps the app usable in the course even if it changes, or if learningapps.org is unavailable. Note: highly dynamic apps may not be fully renderable offline; in that case Moodle automatically falls back to the external source.';
-$string['usinglocalcopy'] = 'This activity is being displayed from a locally stored copy.';
+$string['storelocally_help'] = 'When enabled, Moodle downloads the app content once and stores a local, self-contained copy in the course file storage: images, audio, video and fonts are embedded directly, and scripts/stylesheets are inlined. This keeps the app usable in the course even if it changes, or if learningapps.org is unavailable. Note: highly dynamic apps that load content at runtime via JavaScript may not be fully renderable offline; in that case Moodle automatically falls back to the external source.';
+$string['usinglocalcopy'] = 'This activity is being displayed from a locally stored, self-contained copy (including embedded images/media).';
+$string['localstoragemaxsize'] = 'Maximum size of embedded media (MB)';
+$string['localstoragemaxsize_desc'] = 'Upper limit, in megabytes, for the total size of images, audio, video and font files embedded into the local snapshot per activity. Resources exceeding this are skipped and remain an external link.';
 
 $string['enablelocalstorage'] = 'Allow local reuse';
 $string['enablelocalstorage_desc'] = 'Allows teachers to use the "Store app data locally in Moodle" option when creating a LearningApp activity.';

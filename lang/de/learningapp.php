@@ -40,8 +40,10 @@ $string['grademax_help'] = 'Die Punktzahl, die im Notenbuch eingetragen wird, so
 $string['grademaxpositive'] = 'Die maximale Punktzahl muss größer als 0 sein.';
 
 $string['storelocally'] = 'App-Daten lokal in Moodle speichern';
-$string['storelocally_help'] = 'Wenn aktiviert, lädt Moodle die Inhalte der App einmalig herunter und speichert eine lokale Kopie im Dateisystem des Kurses. So bleibt die App auch bei Änderungen oder Ausfällen von learningapps.org im Kurs nutzbar. Hinweis: Sehr dynamische Apps können unter Umständen nicht vollständig offline dargestellt werden; in diesem Fall wird automatisch wieder die externe Quelle eingebunden.';
-$string['usinglocalcopy'] = 'Diese Aktivität wird aus einer lokal gespeicherten Kopie angezeigt.';
+$string['storelocally_help'] = 'Wenn aktiviert, lädt Moodle die Inhalte der App einmalig herunter und speichert eine lokale, in sich geschlossene Kopie im Dateisystem des Kurses: Bilder, Audio, Video und Schriftarten werden dabei direkt eingebettet, Skripte und Stylesheets inline übernommen. So bleibt die App auch bei Änderungen oder Ausfällen von learningapps.org im Kurs nutzbar. Hinweis: Sehr dynamische Apps, die Inhalte erst zur Laufzeit per JavaScript nachladen, können unter Umständen nicht vollständig offline dargestellt werden; in diesem Fall wird automatisch wieder die externe Quelle eingebunden.';
+$string['usinglocalcopy'] = 'Diese Aktivität wird aus einer lokal gespeicherten, eigenständigen Kopie (inkl. eingebetteter Bilder/Mediendateien) angezeigt.';
+$string['localstoragemaxsize'] = 'Maximale Größe eingebetteter Medien (MB)';
+$string['localstoragemaxsize_desc'] = 'Obergrenze in Megabyte für die Gesamtgröße der Bilder, Audio-, Video- und Schriftdateien, die pro Aktivität in den lokalen Schnappschuss eingebettet werden. Größere oder darüber hinausgehende Ressourcen werden übersprungen und bleiben als externer Link erhalten.';
 
 $string['enablelocalstorage'] = 'Lokale Wiederverwendung erlauben';
 $string['enablelocalstorage_desc'] = 'Erlaubt Lehrkräften, beim Anlegen einer LearningApp-Aktivität die Option "App-Daten lokal in Moodle speichern" zu nutzen.';
