@@ -116,6 +116,9 @@ function learningapp_transform_url($url) {
 function learningapp_add_instance(stdClass $data, $mform = null) {
     global $DB;
 
+    debugging('mod_learningapp DIAG add_instance: received externalurl = ' .
+        var_export($data->externalurl ?? null, true), DEBUG_DEVELOPER);
+
     $converted = learningapp_transform_url($data->externalurl);
     if ($converted === false) {
         throw new moodle_exception('invalidurl', 'mod_learningapp');
@@ -126,6 +129,10 @@ function learningapp_add_instance(stdClass $data, $mform = null) {
     $data->timemodified = $data->timecreated;
 
     $data->id = $DB->insert_record('learningapp', $data);
+
+    $storedcheck = $DB->get_field('learningapp', 'externalurl', ['id' => $data->id]);
+    debugging('mod_learningapp DIAG add_instance: stored externalurl (readback) = ' .
+        var_export($storedcheck, true), DEBUG_DEVELOPER);
 
     learningapp_grade_item_update($data);
 
@@ -148,6 +155,9 @@ function learningapp_add_instance(stdClass $data, $mform = null) {
 function learningapp_update_instance(stdClass $data, $mform = null) {
     global $DB;
 
+    debugging('mod_learningapp DIAG update_instance: received externalurl = ' .
+        var_export($data->externalurl ?? null, true), DEBUG_DEVELOPER);
+
     $converted = learningapp_transform_url($data->externalurl);
     if ($converted === false) {
         throw new moodle_exception('invalidurl', 'mod_learningapp');
@@ -158,6 +168,10 @@ function learningapp_update_instance(stdClass $data, $mform = null) {
     $data->id = $data->instance;
 
     $DB->update_record('learningapp', $data);
+
+    $storedcheck = $DB->get_field('learningapp', 'externalurl', ['id' => $data->id]);
+    debugging('mod_learningapp DIAG update_instance: stored externalurl (readback) = ' .
+        var_export($storedcheck, true), DEBUG_DEVELOPER);
 
     learningapp_grade_item_update($data);
 

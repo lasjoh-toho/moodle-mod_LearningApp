@@ -17,8 +17,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'mod_learningapp';
-$plugin->version   = 2026090302;
+$plugin->version   = 2026090303;
 $plugin->requires  = 2022041900; // Moodle 4.0 (build 20220419) and later.
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.0.2';
+$plugin->release   = '1.0.3-diag';
 $plugin->cron      = 0;
