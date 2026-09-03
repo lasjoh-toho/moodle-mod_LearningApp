@@ -23,6 +23,36 @@ defined('MOODLE_INTERNAL') || die();
  * @return bool
  */
 function xmldb_learningapp_upgrade($oldversion) {
-    // No upgrade steps yet — this is the 1.0.0 baseline release.
+    global $DB;
+
+    $dbman = $DB->get_manager();
+
+    if ($oldversion < 2026090301) {
+        // Some early installs of this plugin ended up without the
+        // learningapp_submissions table (e.g. an interrupted or partial
+        // install run before this table existed in db/install.xml).
+        // Create it now if it is still missing, matching the definition
+        // in db/install.xml exactly.
+        $table = new xmldb_table('learningapp_submissions');
+
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('learningappid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('userid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, null);
+        $table->add_field('grade', XMLDB_TYPE_NUMBER, '10, 2', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('timesubmitted', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $table->add_key('learningappid', XMLDB_KEY_FOREIGN, ['learningappid'], 'learningapp', ['id']);
+        $table->add_key('userid', XMLDB_KEY_FOREIGN, ['userid'], 'user', ['id']);
+
+        $table->add_index('learningapp_user_idx', XMLDB_INDEX_UNIQUE, ['learningappid', 'userid']);
+
+        if (!$dbman->table_exists($table)) {
+            $dbman->create_table($table);
+        }
+
+        upgrade_mod_savepoint(true, 2026090301, 'learningapp');
+    }
+
     return true;
 }
