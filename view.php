@@ -76,6 +76,9 @@ if ($cansubmit) {
     ]);
 }
 
+$candownloadhtml = get_config('mod_learningapp', 'enable_html_download')
+    && has_capability('mod/learningapp:downloadhtml', $context);
+
 $jsparams = [
     'cmid'      => $cm->id,
     'sesskey'   => sesskey(),
@@ -107,6 +110,13 @@ if ($uselocal) {
     <button type="button" class="btn btn-secondary la-fullscreen" title="<?php p(get_string('fullscreen', 'mod_learningapp')); ?>">
         <?php p(get_string('fullscreen', 'mod_learningapp')); ?>
     </button>
+    <?php if ($candownloadhtml): ?>
+    <a href="<?php echo (new moodle_url('/mod/learningapp/download.php', ['id' => $cm->id]))->out(); ?>"
+       class="btn btn-secondary la-download-html"
+       title="<?php p(get_string('downloadhtml', 'mod_learningapp')); ?>">
+        <?php p(get_string('downloadhtml', 'mod_learningapp')); ?>
+    </a>
+    <?php endif; ?>
 </div>
 
 <div class="learningapp-container" id="learningapp-container">

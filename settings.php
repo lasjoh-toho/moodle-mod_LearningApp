@@ -15,4 +15,11 @@ if ($ADMIN->fulltree) {
         get_string('enablelocalstorage_desc', 'mod_learningapp'),
         0
     ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'mod_learningapp/enable_html_download',
+        get_string('enablehtmldownload', 'mod_learningapp'),
+        get_string('enablehtmldownload_desc', 'mod_learningapp'),
+        0
+    ));
 }

@@ -128,6 +128,22 @@ class storage_manager {
     }
 
     /**
+     * Returns the stored snapshot file object, if any.
+     *
+     * @param int $instanceid
+     * @param \context_module $context
+     * @return \stored_file|null
+     */
+    public static function get_snapshot_file($instanceid, \context_module $context) {
+        $fs = get_file_storage();
+        $file = $fs->get_file($context->id, 'mod_learningapp', self::FILEAREA, $instanceid, '/', 'snapshot.html');
+        if (!$file || $file->is_directory()) {
+            return null;
+        }
+        return $file;
+    }
+
+    /**
      * Deletes all locally cached files for an instance.
      *
      * @param int $instanceid

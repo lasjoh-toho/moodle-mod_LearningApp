@@ -46,6 +46,13 @@ $string['usinglocalcopy'] = 'Diese Aktivität wird aus einer lokal gespeicherten
 $string['enablelocalstorage'] = 'Lokale Wiederverwendung erlauben';
 $string['enablelocalstorage_desc'] = 'Erlaubt Lehrkräften, beim Anlegen einer LearningApp-Aktivität die Option "App-Daten lokal in Moodle speichern" zu nutzen.';
 
+$string['enablehtmldownload'] = 'HTML-Download erlauben';
+$string['enablehtmldownload_desc'] = 'Erlaubt Lehrkräften (und weiteren Nutzer:innen mit der Fähigkeit mod/learningapp:downloadhtml), die Aktivität als eigenständige HTML-Datei herunterzuladen. Nutzt bei Bedarf denselben lokalen Schnappschuss-Mechanismus wie "Lokale Wiederverwendung" – siehe README für dessen Einschränkungen bei dynamischen Apps.';
+$string['downloadhtml'] = 'Als HTML herunterladen';
+$string['htmldownloaddisabled'] = 'Der HTML-Download wurde vom Administrator/von der Administratorin für diese Website nicht freigegeben.';
+$string['htmldownloadfailed'] = 'Die App konnte nicht als HTML-Datei heruntergeladen werden. Bitte versuchen Sie es später erneut.';
+$string['learningapp:downloadhtml'] = 'LearningApp-Aktivität als HTML herunterladen';
+
 $string['playercontrols'] = 'Player-Steuerung';
 $string['fullscreen'] = 'Vollbild';
 $string['zoomin'] = 'Vergrößern';

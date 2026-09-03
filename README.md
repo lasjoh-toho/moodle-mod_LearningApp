@@ -28,6 +28,15 @@ Vollbild-/Zoom-Player und Anbindung an das Moodle-Notenbuch.
   responsiven iFrame mit echten Vollbild- (`Fullscreen API`) sowie
   Zoom+/Zoom-/Zoom-Reset-Buttons (CSS `transform: scale(...)`,
   `amd/src/player.js`).
+- **HTML-Download (optional, admin-freigebbar)**: Unter *Website-Administration
+  → Plugins → Aktivitäten → LearningApp* kann der Administrator/die
+  Administratorin „HTML-Download erlauben“ aktivieren. Ist das aktiv, sehen
+  Lehrkräfte (Capability `mod/learningapp:downloadhtml`) im Player einen
+  „Als HTML herunterladen“-Button, der die Aktivität als eigenständige
+  `.html`-Datei zum Speichern anbietet (`download.php`). Existiert noch kein
+  lokaler Schnappschuss, wird beim ersten Download automatisch einer erzeugt
+  (derselbe Mechanismus wie bei „Lokale Wiederverwendung“, siehe deren
+  Einschränkungen oben).
 - **Notenbuch-Anbindung**: Lehrkräfte legen eine maximale Punktzahl
   (`grademax`) fest. Lernende geben ihre Bearbeitung über den Button
   „Als Erledigt / Bestanden abgeben“ ab; die Punktzahl wird per AJAX

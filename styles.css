@@ -5,6 +5,10 @@
     flex-wrap: wrap;
 }
 
+.mod-learningapp-page .la-download-html {
+    text-decoration: none;
+}
+
 .mod-learningapp-page .learningapp-container {
     width: 100%;
     background: #000;
