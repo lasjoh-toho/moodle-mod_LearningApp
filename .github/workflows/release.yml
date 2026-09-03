@@ -1,0 +1,28 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package plugin as learningapp.zip
+        run: |
+          mkdir -p /tmp/build/learningapp
+          rsync -a --exclude='.git' --exclude='.github' --exclude='/tmp' ./ /tmp/build/learningapp/
+          cd /tmp/build
+          zip -r "${GITHUB_WORKSPACE}/learningapp.zip" learningapp
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: learningapp.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
