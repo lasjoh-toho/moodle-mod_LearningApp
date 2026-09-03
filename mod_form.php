@@ -38,7 +38,13 @@ class mod_learningapp_mod_form extends moodleform_mod {
         $this->standard_intro_elements();
 
         $mform->addElement('text', 'externalurl', get_string('externalurl', 'mod_learningapp'), ['size' => '64']);
-        $mform->setType('externalurl', PARAM_URL);
+        // Intentionally PARAM_RAW_TRIMMED, not PARAM_URL: Moodle's own PARAM_URL
+        // cleaning silently discards anything it doesn't already recognise as a
+        // fully-qualified URL (e.g. missing https://, or the /viewXXXXX and
+        // /display?v= formats), turning it into an empty string before it ever
+        // reaches learningapp_transform_url(). We validate and normalise the
+        // value ourselves below and in lib.php, so we must receive it unmodified.
+        $mform->setType('externalurl', PARAM_RAW_TRIMMED);
         $mform->addRule('externalurl', null, 'required', null, 'client');
         $mform->addHelpButton('externalurl', 'externalurl', 'mod_learningapp');
 
