@@ -15,15 +15,27 @@ defined('MOODLE_INTERNAL') || die();
  * be reused if the app changes or the external platform is unavailable.
  *
  * Note: LearningApps does not publish an official export/download API. This
- * manager stores a best-effort, self-contained local snapshot: the watch
- * page HTML is fetched, and any stylesheets, scripts, images and other
- * media it references are fetched too and embedded directly into the
- * snapshot (stylesheets/scripts inlined as <style>/<script> content, images
- * and other media as base64 data: URIs). Apps that load additional
- * resources dynamically via JavaScript at runtime (e.g. fetching exercise
- * data from an API after the page has loaded) cannot be captured this way;
- * in that case Moodle transparently falls back to embedding the live
- * external URL. This limitation is documented in the plugin README.
+ * manager stores a best-effort, self-contained local snapshot.
+ *
+ * LearningApps serves its watch/display pages as a two-level structure: the
+ * fetched page is only an outer wrapper containing an initially empty
+ * <iframe id="frame">, whose real src (.../show.php?id=XXXXX, the actual
+ * exercise) is assigned at runtime by an inline bootstrap script. Since we
+ * cannot execute JavaScript while fetching, this manager parses that
+ * bootstrap script to find the show.php URL, fetches that nested document
+ * too, and embeds it (with its own images/scripts/stylesheets) as a
+ * data:text/html URI directly on the <iframe>'s src attribute — then
+ * removes the bootstrap script so it cannot immediately overwrite our
+ * embedded src with a live, online-only URL again. Only one level of
+ * nesting is followed to keep fetch time and memory bounded.
+ *
+ * Images, audio, video and fonts referenced anywhere in either document are
+ * embedded as base64 data: URIs; external stylesheets/scripts are inlined.
+ * Apps that load further content dynamically via JavaScript at runtime
+ * (e.g. fetching exercise data from an API after the page has loaded)
+ * cannot be captured this way; in that case Moodle falls back to embedding
+ * the live external URL. This limitation is documented in the plugin
+ * README.
  *
  * @package     mod_learningapp
  * @copyright   2026 lasjoh-toho
@@ -45,8 +57,9 @@ class storage_manager {
 
     /**
      * Downloads the given LearningApps watch URL and stores a self-contained
-     * local snapshot (images/audio/video/fonts embedded as data URIs,
-     * stylesheets/scripts inlined) in the Moodle file system.
+     * local snapshot (nested show.php exercise inlined, images/audio/video/
+     * fonts embedded as data URIs, stylesheets/scripts inlined) in the
+     * Moodle file system.
      *
      * @param int $instanceid learningapp instance id
      * @param string $watchurl canonical https://learningapps.org/watch?v=XXXXX URL
@@ -86,7 +99,7 @@ class storage_manager {
         $budget->seen = [];
         $budget->curl = $curl;
 
-        $html = self::embed_assets($html, $budget);
+        $html = self::embed_assets($html, $budget, $watchurl, 0);
 
         $fs = get_file_storage();
         $filerecord = [
@@ -106,31 +119,85 @@ class storage_manager {
      * Rewrites external stylesheets/scripts into inline content and
      * external images/media into base64 data: URIs, so the resulting HTML
      * is as self-contained as possible within the configured size budget.
+     * At depth 0, also follows LearningApps' nested show.php exercise
+     * iframe (see class docblock) one level deep.
      *
      * @param string $html
      * @param \stdClass $budget shared fetch budget/cache (totalbytes, maxtotalbytes, seen, curl)
+     * @param string $baseurl URL this HTML was fetched from, used to resolve relative asset paths
+     * @param int $depth current nesting depth (0 = outer wrapper, 1 = nested exercise)
      * @return string
      */
-    protected static function embed_assets($html, \stdClass $budget) {
-        // 1) Inline external stylesheets, embedding any url(...) references inside them too.
+    protected static function embed_assets($html, \stdClass $budget, $baseurl, $depth) {
+        // Step 0 (outer wrapper only): follow the nested show.php exercise
+        // iframe, embed it fully, and neutralise the bootstrap script that
+        // would otherwise overwrite our embedded src with a live URL.
+        if ($depth === 0 && preg_match('#//learningapps\.org/show\.php\?id=([A-Za-z0-9]+)#i', $html, $idmatch)) {
+            $showurl = 'https://learningapps.org/show.php?id=' . $idmatch[1] . '&disableanalytics=1';
+            $innerhtml = self::fetch_text($showurl, $budget, $baseurl);
+            if ($innerhtml !== null) {
+                $innerhtml = self::embed_assets($innerhtml, $budget, $showurl, $depth + 1);
+                $datauri = 'data:text/html;charset=utf-8;base64,' . base64_encode($innerhtml);
+                $newhtml = preg_replace(
+                    '#(<iframe\b[^>]*\bid=["\']frame["\'][^>]*\bsrc=)["\'][^"\']*["\']#i',
+                    '$1"' . $datauri . '"',
+                    $html,
+                    1
+                );
+                if ($newhtml !== null) {
+                    $html = $newhtml;
+                    // Remove the bootstrap script (identified by its distinctive
+                    // "setURLs" function): its job was to reassign the iframe
+                    // src based on live network conditions, handle device
+                    // quirks, and ping an analytics endpoint — all pointless
+                    // (and the src-reassignment actively harmful) once we've
+                    // already set a working static src ourselves.
+                    $stripped = preg_replace(
+                        '#<script\b[^>]*>(?:(?!</script>).)*setURLs(?:(?!</script>).)*</script>#is',
+                        '',
+                        $html
+                    );
+                    if ($stripped !== null) {
+                        $html = $stripped;
+                    }
+                    // Replace it with a minimal relay: LearningApps reports a
+                    // solved exercise via postMessage to its embedding page
+                    // (see https://learningapps.org/api). Depending on
+                    // whether the exercise engine targets window.parent (this
+                    // wrapper) or window.top directly, the message may or may
+                    // not already reach the real top-level page on its own;
+                    // this relay guarantees it does either way, without
+                    // depending on parsing/preserving LearningApps' own JS.
+                    $relay = '<script>window.addEventListener("message",function(e){'
+                        . 'if(window.parent&&window.parent!==window){window.parent.postMessage(e.data,"*");}'
+                        . '});</script>';
+                    $withrelay = preg_replace('#</body>#i', $relay . '</body>', $html, 1);
+                    if ($withrelay !== null) {
+                        $html = $withrelay;
+                    }
+                }
+            }
+        }
+
+        // Step 1: inline external stylesheets, embedding any url(...) references inside them too.
         $html = preg_replace_callback(
             '#<link\b[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^"\']+)["\'][^>]*/?>#i',
-            function($m) use ($budget) {
-                $css = self::fetch_text($m[1], $budget);
+            function($m) use ($budget, $baseurl) {
+                $css = self::fetch_text($m[1], $budget, $baseurl);
                 if ($css === null) {
                     return $m[0];
                 }
-                $css = self::embed_css_urls($css, $budget);
+                $css = self::embed_css_urls($css, $budget, $baseurl);
                 return '<style>' . $css . '</style>';
             },
             $html
         );
 
-        // 2) Inline external <script src="...">...</script> tags (skip ones with inline content already).
+        // Step 2: inline external <script src="...">...</script> tags (skip ones with inline content already).
         $html = preg_replace_callback(
             '#<script\b((?:(?!src=)[^>])*)\bsrc=["\']([^"\']+)["\']([^>]*)>\s*</script>#i',
-            function($m) use ($budget) {
-                $js = self::fetch_text($m[2], $budget);
+            function($m) use ($budget, $baseurl) {
+                $js = self::fetch_text($m[2], $budget, $baseurl);
                 if ($js === null) {
                     return $m[0];
                 }
@@ -139,11 +206,13 @@ class storage_manager {
             $html
         );
 
-        // 3) Embed images/media referenced via src=/poster= attributes as data URIs.
+        // Step 3: embed images/media referenced via src=/poster= attributes as data URIs.
+        // (The nested show.php iframe's data: URI src, just written in step 0, is left alone
+        // since normalise_url() ignores data: URIs.)
         $html = preg_replace_callback(
-            '#\b(src|poster)=["\']((?:https?:)?//[^"\']+)["\']#i',
-            function($m) use ($budget) {
-                $datauri = self::fetch_data_uri($m[2], $budget);
+            '#\b(src|poster)=["\']([^"\']+)["\']#i',
+            function($m) use ($budget, $baseurl) {
+                $datauri = self::fetch_data_uri($m[2], $budget, $baseurl);
                 if ($datauri === null) {
                     return $m[0];
                 }
@@ -152,11 +221,11 @@ class storage_manager {
             $html
         );
 
-        // 4) Embed url(...) references inside any remaining inline <style> blocks.
+        // Step 4: embed url(...) references inside any remaining inline <style> blocks.
         $html = preg_replace_callback(
             '#<style\b[^>]*>(.*?)</style>#is',
-            function($m) use ($budget) {
-                return '<style>' . self::embed_css_urls($m[1], $budget) . '</style>';
+            function($m) use ($budget, $baseurl) {
+                return '<style>' . self::embed_css_urls($m[1], $budget, $baseurl) . '</style>';
             },
             $html
         );
@@ -169,13 +238,14 @@ class storage_manager {
      *
      * @param string $css
      * @param \stdClass $budget
+     * @param string $baseurl
      * @return string
      */
-    protected static function embed_css_urls($css, \stdClass $budget) {
+    protected static function embed_css_urls($css, \stdClass $budget, $baseurl) {
         return preg_replace_callback(
-            '#url\(\s*[\'"]?((?:https?:)?//[^\'")]+)[\'"]?\s*\)#i',
-            function($m) use ($budget) {
-                $datauri = self::fetch_data_uri($m[1], $budget);
+            '#url\(\s*[\'"]?([^\'")]+)[\'"]?\s*\)#i',
+            function($m) use ($budget, $baseurl) {
+                $datauri = self::fetch_data_uri($m[1], $budget, $baseurl);
                 if ($datauri === null) {
                     return $m[0];
                 }
@@ -186,15 +256,17 @@ class storage_manager {
     }
 
     /**
-     * Fetches a URL's raw text content (for inlining scripts/stylesheets),
-     * honouring the shared size budget and a per-request cache.
+     * Fetches a URL's raw text content (for inlining scripts/stylesheets/the
+     * nested exercise document), honouring the shared size budget and a
+     * per-request cache.
      *
      * @param string $url
      * @param \stdClass $budget
+     * @param string $baseurl used to resolve $url if it is relative
      * @return string|null null if the URL could not/should not be fetched
      */
-    protected static function fetch_text($url, \stdClass $budget) {
-        $url = self::normalise_url($url);
+    protected static function fetch_text($url, \stdClass $budget, $baseurl) {
+        $url = self::normalise_url($url, $baseurl);
         if ($url === null) {
             return null;
         }
@@ -228,10 +300,11 @@ class storage_manager {
      *
      * @param string $url
      * @param \stdClass $budget
+     * @param string $baseurl used to resolve $url if it is relative
      * @return string|null null if the URL could not/should not be embedded
      */
-    protected static function fetch_data_uri($url, \stdClass $budget) {
-        $url = self::normalise_url($url);
+    protected static function fetch_data_uri($url, \stdClass $budget, $baseurl) {
+        $url = self::normalise_url($url, $baseurl);
         if ($url === null) {
             return null;
         }
@@ -268,13 +341,15 @@ class storage_manager {
     }
 
     /**
-     * Normalises a URL found in the markup and filters out anything we
-     * should not (or safely cannot) fetch.
+     * Normalises a URL found in the markup (absolute, protocol-relative,
+     * absolute-path, or relative) against the page it was found in, and
+     * filters out anything we should not (or safely cannot) fetch.
      *
      * @param string $url
+     * @param string $baseurl the URL of the document this reference was found in
      * @return string|null
      */
-    protected static function normalise_url($url) {
+    protected static function normalise_url($url, $baseurl) {
         $url = trim($url);
         if ($url === ''
                 || strpos($url, 'data:') === 0
@@ -284,14 +359,28 @@ class storage_manager {
             return null;
         }
         if (strpos($url, '//') === 0) {
-            $url = 'https:' . $url;
+            return 'https:' . $url;
         }
-        if (!preg_match('#^https?://#i', $url)) {
-            // Relative paths cannot be safely resolved without knowing the
-            // original page's base URL context; leave them untouched.
+        if (preg_match('#^https?://#i', $url)) {
+            return $url;
+        }
+
+        // Relative (absolute-path "/x/y" or document-relative "x/y") — resolve against $baseurl.
+        $base = @parse_url($baseurl);
+        if (empty($base['host'])) {
             return null;
         }
-        return $url;
+        $scheme = $base['scheme'] ?? 'https';
+
+        if (strpos($url, '/') === 0) {
+            return $scheme . '://' . $base['host'] . $url;
+        }
+
+        $basepath = isset($base['path']) ? preg_replace('#/[^/]*$#', '/', $base['path']) : '/';
+        if ($basepath === '') {
+            $basepath = '/';
+        }
+        return $scheme . '://' . $base['host'] . $basepath . $url;
     }
 
     /**

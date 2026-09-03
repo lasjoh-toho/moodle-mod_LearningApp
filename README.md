@@ -24,13 +24,24 @@ Vollbild-/Zoom-Player und Anbindung an das Moodle-Notenbuch.
   (Standard: 15 MB) — größere oder zusätzliche Ressourcen werden
   übersprungen und bleiben als externer Link bestehen.
 
+  LearningApps liefert die abgerufene Seite als zweistufigen Wrapper aus:
+  ein äußeres Dokument mit einem zunächst leeren `<iframe id="frame">`,
+  dessen echte Quelle (die eigentliche Übung, `show.php?id=…`) erst zur
+  Laufzeit per JavaScript gesetzt wird. Der Storage-Manager erkennt dieses
+  Muster, lädt das verschachtelte Dokument mit, bettet dessen eigene
+  Bilder/CSS/JS ebenfalls ein und trägt das Ergebnis direkt und statisch
+  als `data:`-URI in das `<iframe>` ein — eine Verschachtelungsebene tief.
+  Das ursprüngliche Bootstrap-Skript (das die Quelle sonst laufend anhand
+  der Netzwerkverbindung neu setzen würde) wird entfernt und durch einen
+  schlanken `postMessage`-Relay ersetzt, siehe Notenbuch-Anbindung unten.
+
   > **Hinweis:** learningapps.org bietet keine offizielle Export-Schnittstelle.
   > Der lokale Schnappschuss ist ein Best-Effort-Mirror: Bilder/Medien/CSS/JS,
-  > die direkt im HTML referenziert werden, werden eingebettet. Stark
-  > dynamische Apps, die Inhalte erst zur Laufzeit per JavaScript vom Server
-  > nachladen (z. B. Übungsdaten per API-Aufruf), lassen sich damit nicht
-  > vollständig offline darstellen — in diesem Fall bindet das Modul
-  > automatisch wieder die externe Quelle ein.
+  > die direkt im HTML referenziert werden (inkl. einer Verschachtelungsebene),
+  > werden eingebettet. Stark dynamische Apps, die Inhalte erst zur Laufzeit
+  > per JavaScript vom Server nachladen (z. B. Übungsdaten per API-Aufruf),
+  > lassen sich damit nicht vollständig offline darstellen — in diesem Fall
+  > bindet das Modul automatisch wieder die externe Quelle ein.
 - **Player mit Vollbild & Zoom**: `view.php` rendert die App in einem
   responsiven iFrame mit echten Vollbild- (`Fullscreen API`) sowie
   Zoom+/Zoom-/Zoom-Reset-Buttons (CSS `transform: scale(...)`,
@@ -49,6 +60,16 @@ Vollbild-/Zoom-Player und Anbindung an das Moodle-Notenbuch.
   „Als Erledigt / Bestanden abgeben“ ab; die Punktzahl wird per AJAX
   (`ajax_submit.php`) übermittelt, im Notenbuch eingetragen und die
   Aktivität auf „Abgeschlossen“ gesetzt.
+
+  **Automatische Erfolgserkennung:** LearningApps meldet eine gelöste
+  Übung an die einbettende Seite per `postMessage` im Format
+  `"AppSolved|<id>"` (siehe [learningapps.org/api](https://learningapps.org/api)).
+  `amd/src/player.js` hört auf diese Nachricht und löst die Abgabe
+  automatisch aus — der manuelle Button bleibt als Rückfallebene bestehen
+  (nicht jeder App-Typ meldet einen eindeutigen „gelöst“-Zustand, und bei
+  einem lokalen Schnappschuss kann die automatische Erkennung entfallen,
+  wenn die verschachtelte Übung wegen des Größenlimits nicht eingebettet
+  werden konnte).
 - **Vollständig lokalisiert** (`lang/de`, `lang/en`).
 
 ## Voraussetzungen

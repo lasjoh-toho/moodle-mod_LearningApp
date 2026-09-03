@@ -76,37 +76,60 @@ define([], function() {
             });
         }
 
-        if (submitBtn) {
-            submitBtn.addEventListener('click', function() {
-                submitBtn.setAttribute('disabled', 'disabled');
-                var body = 'cmid=' + encodeURIComponent(params.cmid) +
-                    '&sesskey=' + encodeURIComponent(params.sesskey);
+        var doSubmit = function() {
+            if (!submitBtn || submitBtn.hasAttribute('disabled')) {
+                return;
+            }
+            submitBtn.setAttribute('disabled', 'disabled');
+            var body = 'cmid=' + encodeURIComponent(params.cmid) +
+                '&sesskey=' + encodeURIComponent(params.sesskey);
 
-                window.fetch(params.ajaxurl, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: body,
-                    credentials: 'same-origin'
-                }).then(function(resp) {
-                    return resp.json();
-                }).then(function(data) {
-                    if (data.success) {
-                        submitBtn.textContent = params.strings.alreadysubmitted;
-                        if (feedback) {
-                            feedback.textContent = params.strings.submitsuccess;
-                        }
-                    } else {
-                        submitBtn.removeAttribute('disabled');
-                        if (feedback) {
-                            feedback.textContent = data.message || params.strings.submiterror;
-                        }
+            window.fetch(params.ajaxurl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: body,
+                credentials: 'same-origin'
+            }).then(function(resp) {
+                return resp.json();
+            }).then(function(data) {
+                if (data.success) {
+                    submitBtn.textContent = params.strings.alreadysubmitted;
+                    if (feedback) {
+                        feedback.textContent = params.strings.submitsuccess;
                     }
-                }).catch(function() {
+                } else {
                     submitBtn.removeAttribute('disabled');
                     if (feedback) {
-                        feedback.textContent = params.strings.submiterror;
+                        feedback.textContent = data.message || params.strings.submiterror;
                     }
-                });
+                }
+            }).catch(function() {
+                submitBtn.removeAttribute('disabled');
+                if (feedback) {
+                    feedback.textContent = params.strings.submiterror;
+                }
+            });
+        };
+
+        if (submitBtn) {
+            submitBtn.addEventListener('click', doSubmit);
+        }
+
+        // LearningApps reports a solved exercise to its embedding page via
+        // postMessage with a string payload like "AppSolved|<id>" (see
+        // https://learningapps.org/api). When the app is embedded directly
+        // (live, or as a fully self-contained local snapshot with the
+        // nested exercise inlined), this lets us submit automatically
+        // instead of requiring the manual button click. The manual button
+        // stays as a fallback for exercise types that never report a
+        // "solved" state, or when auto-detection couldn't fire (e.g. a
+        // local snapshot whose nested exercise assets exceeded the admin's
+        // size limit and therefore couldn't be embedded).
+        if (submitBtn) {
+            window.addEventListener('message', function(event) {
+                if (typeof event.data === 'string' && event.data.indexOf('AppSolved') === 0) {
+                    doSubmit();
+                }
             });
         }
     };
