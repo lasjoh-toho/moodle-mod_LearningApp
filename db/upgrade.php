@@ -54,5 +54,47 @@ function xmldb_learningapp_upgrade($oldversion) {
         upgrade_mod_savepoint(true, 2026090301, 'learningapp');
     }
 
+    if ($oldversion < 2026090304) {
+        // Some installs of this plugin ended up with a learningapp table
+        // that is missing one or more columns entirely (observed: the
+        // externalurl column did not exist at all, causing form data to be
+        // silently discarded on save with no error, since Moodle's DB layer
+        // ignores properties that don't match a real column). This step
+        // checks every column defined in db/install.xml and adds whichever
+        // ones are missing on this site.
+        //
+        // Columns are intentionally added WITHOUT a NOT NULL constraint
+        // (even where db/install.xml specifies one for a fresh install),
+        // because ALTER TABLE ... ADD COLUMN ... NOT NULL can fail outright
+        // on a table that already contains rows unless every existing row
+        // gets a default value the storage engine accepts for that column
+        // type (which is not reliably possible for TEXT columns in MySQL).
+        // A nullable column is safe here and the plugin code already copes
+        // with empty/missing values.
+        $table = new xmldb_table('learningapp');
+
+        $expectedfields = [
+            new xmldb_field('course', XMLDB_TYPE_INTEGER, '10', null, null, null, null),
+            new xmldb_field('name', XMLDB_TYPE_CHAR, '255', null, null, null, null),
+            new xmldb_field('intro', XMLDB_TYPE_TEXT, null, null, null, null, null),
+            new xmldb_field('introformat', XMLDB_TYPE_INTEGER, '4', null, null, null, '1'),
+            new xmldb_field('externalurl', XMLDB_TYPE_TEXT, null, null, null, null, null),
+            new xmldb_field('storelocally', XMLDB_TYPE_INTEGER, '1', null, null, null, '0'),
+            new xmldb_field('grademax', XMLDB_TYPE_NUMBER, '10, 2', null, null, null, '100'),
+            new xmldb_field('timecreated', XMLDB_TYPE_INTEGER, '10', null, null, null, '0'),
+            new xmldb_field('timemodified', XMLDB_TYPE_INTEGER, '10', null, null, null, '0'),
+        ];
+
+        if ($dbman->table_exists($table)) {
+            foreach ($expectedfields as $field) {
+                if (!$dbman->field_exists($table, $field)) {
+                    $dbman->add_field($table, $field);
+                }
+            }
+        }
+
+        upgrade_mod_savepoint(true, 2026090304, 'learningapp');
+    }
+
     return true;
 }

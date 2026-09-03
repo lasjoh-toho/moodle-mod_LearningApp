@@ -79,9 +79,6 @@ class mod_learningapp_mod_form extends moodleform_mod {
     public function validation($data, $files) {
         $errors = parent::validation($data, $files);
 
-        debugging('mod_learningapp DIAG mod_form::validation: raw externalurl = ' .
-            var_export($data['externalurl'] ?? null, true), DEBUG_DEVELOPER);
-
         $converted = learningapp_transform_url($data['externalurl'] ?? '');
         if ($converted === false) {
             $errors['externalurl'] = get_string('invalidurl', 'mod_learningapp');
@@ -101,8 +98,5 @@ class mod_learningapp_mod_form extends moodleform_mod {
      */
     public function data_preprocessing(&$defaultvalues) {
         parent::data_preprocessing($defaultvalues);
-
-        debugging('mod_learningapp DIAG mod_form::data_preprocessing: externalurl being loaded into form = ' .
-            var_export($defaultvalues['externalurl'] ?? null, true), DEBUG_DEVELOPER);
     }
 }
