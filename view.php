@@ -16,6 +16,7 @@
 
 require(__DIR__ . '/../../config.php');
 require_once($CFG->dirroot . '/mod/learningapp/lib.php');
+require_once($CFG->libdir . '/filelib.php');
 
 $id = optional_param('id', 0, PARAM_INT);       // Course_module ID.
 $a  = optional_param('a', 0, PARAM_INT);        // Learningapp instance ID.
@@ -57,9 +58,17 @@ $PAGE->add_body_class('mod-learningapp-page');
 
 $PAGE->requires->css('/mod/learningapp/styles.css');
 
+$localstorageenabled = (bool)get_config('mod_learningapp', 'enable_local_storage');
+
 $embedurl = $learningapp->externalurl;
 $uselocal = false;
-if (!empty($learningapp->storelocally)) {
+if (!empty($learningapp->storelocally) && $localstorageenabled) {
+    // Self-heal: the activity is configured to use a local copy, but none
+    // exists yet (e.g. never generated, or purged by an upgrade step) —
+    // generate one now instead of silently falling back to the live URL.
+    if (!\mod_learningapp\local\storage_manager::has_local_copy($learningapp->id, $context)) {
+        \mod_learningapp\local\storage_manager::store($learningapp->id, $learningapp->externalurl, $context);
+    }
     $localurl = \mod_learningapp\local\storage_manager::get_local_url($learningapp->id, $context);
     if ($localurl) {
         $embedurl = $localurl->out(false);
@@ -78,6 +87,11 @@ if ($cansubmit) {
 
 $candownloadhtml = get_config('mod_learningapp', 'enable_html_download')
     && has_capability('mod/learningapp:downloadhtml', $context);
+$canstorelocally = $localstorageenabled
+    && has_capability('mod/learningapp:storelocally', $context);
+
+$localcopyfile = \mod_learningapp\local\storage_manager::get_snapshot_file($learningapp->id, $context);
+$localcopysize = $localcopyfile ? display_size($localcopyfile->get_filesize()) : null;
 
 $jsparams = [
     'cmid'      => $cm->id,
@@ -99,22 +113,36 @@ if ($learningapp->intro) {
 }
 
 if ($uselocal) {
-    echo $OUTPUT->notification(get_string('usinglocalcopy', 'mod_learningapp'), 'info');
+    $notice = get_string('usinglocalcopy', 'mod_learningapp');
+    if ($localcopysize) {
+        $notice .= ' (' . get_string('localcopysize', 'mod_learningapp', $localcopysize) . ')';
+    }
+    echo $OUTPUT->notification($notice, 'info');
 }
 ?>
 
 <div class="learningapp-toolbar" role="toolbar" aria-label="<?php p(get_string('playercontrols', 'mod_learningapp')); ?>">
-    <button type="button" class="btn btn-secondary la-zoom-out" title="<?php p(get_string('zoomout', 'mod_learningapp')); ?>">&minus;</button>
-    <button type="button" class="btn btn-secondary la-zoom-reset" title="<?php p(get_string('zoomreset', 'mod_learningapp')); ?>">100%</button>
-    <button type="button" class="btn btn-secondary la-zoom-in" title="<?php p(get_string('zoomin', 'mod_learningapp')); ?>">+</button>
     <button type="button" class="btn btn-secondary la-fullscreen" title="<?php p(get_string('fullscreen', 'mod_learningapp')); ?>">
         <?php p(get_string('fullscreen', 'mod_learningapp')); ?>
     </button>
+    <?php if ($canstorelocally): ?>
+    <a href="<?php echo (new moodle_url('/mod/learningapp/store_locally.php', ['id' => $cm->id, 'sesskey' => sesskey()]))->out(); ?>"
+       class="btn btn-secondary la-store-locally"
+       title="<?php p(get_string('storelocallybutton', 'mod_learningapp')); ?>">
+        <?php p(get_string('storelocallybutton', 'mod_learningapp'));
+        if ($localcopysize) {
+            echo ' (' . s($localcopysize) . ')';
+        } ?>
+    </a>
+    <?php endif; ?>
     <?php if ($candownloadhtml): ?>
     <a href="<?php echo (new moodle_url('/mod/learningapp/download.php', ['id' => $cm->id]))->out(); ?>"
        class="btn btn-secondary la-download-html"
        title="<?php p(get_string('downloadhtml', 'mod_learningapp')); ?>">
-        <?php p(get_string('downloadhtml', 'mod_learningapp')); ?>
+        <?php p(get_string('downloadhtml', 'mod_learningapp'));
+        if ($localcopysize) {
+            echo ' (' . s($localcopysize) . ')';
+        } ?>
     </a>
     <?php endif; ?>
 </div>

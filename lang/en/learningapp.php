@@ -42,11 +42,18 @@ $string['grademaxpositive'] = 'The maximum grade must be greater than 0.';
 $string['storelocally'] = 'Store app data locally in Moodle';
 $string['storelocally_help'] = 'When enabled, Moodle downloads the app content once and stores a local, self-contained copy in the course file storage: images, audio, video and fonts are embedded directly, and scripts/stylesheets are inlined. This keeps the app usable in the course even if it changes, or if learningapps.org is unavailable. Note: highly dynamic apps that load content at runtime via JavaScript may not be fully renderable offline; in that case Moodle automatically falls back to the external source.';
 $string['usinglocalcopy'] = 'This activity is being displayed from a locally stored, self-contained copy (including embedded images/media).';
+$string['localcopysize'] = 'Size: {$a}';
 $string['localstoragemaxsize'] = 'Maximum size of embedded media (MB)';
 $string['localstoragemaxsize_desc'] = 'Upper limit, in megabytes, for the total size of images, audio, video and font files embedded into the local snapshot per activity. Resources exceeding this are skipped and remain an external link.';
 
 $string['enablelocalstorage'] = 'Allow local reuse';
-$string['enablelocalstorage_desc'] = 'Allows teachers to use the "Store app data locally in Moodle" option when creating a LearningApp activity.';
+$string['enablelocalstorage_desc'] = 'Allows teachers to use the "Store app data locally in Moodle" option when creating a LearningApp activity, and to use the "Store locally" button in the player.';
+
+$string['storelocallybutton'] = 'Store locally';
+$string['localstoragedisabled'] = 'Local storage has not been enabled by the site administrator.';
+$string['storelocallysuccess'] = 'App stored locally successfully (size: {$a}).';
+$string['storelocallyfailed'] = 'The app could not be stored locally. Please try again later.';
+$string['learningapp:storelocally'] = 'Manually store/refresh a LearningApp activity locally';
 
 $string['enablehtmldownload'] = 'Allow HTML download';
 $string['enablehtmldownload_desc'] = 'Allows teachers (and any other users with the mod/learningapp:downloadhtml capability) to download the activity as a standalone HTML file. Reuses the same local snapshot mechanism as "local reuse" when needed — see the README for its limitations with dynamic apps.';

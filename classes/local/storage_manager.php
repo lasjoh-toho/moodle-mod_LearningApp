@@ -25,17 +25,33 @@ defined('MOODLE_INTERNAL') || die();
  * bootstrap script to find the show.php URL, fetches that nested document
  * too, and embeds it (with its own images/scripts/stylesheets) as a
  * data:text/html URI directly on the <iframe>'s src attribute — then
- * removes the bootstrap script so it cannot immediately overwrite our
- * embedded src with a live, online-only URL again. Only one level of
- * nesting is followed to keep fetch time and memory bounded.
+ * removes the bootstrap script and replaces it with a minimal postMessage
+ * relay (see amd/src/player.js for the automatic completion detection this
+ * enables). Only one level of nesting is followed to keep fetch time and
+ * memory bounded.
  *
  * Images, audio, video and fonts referenced anywhere in either document are
  * embedded as base64 data: URIs; external stylesheets/scripts are inlined.
+ * Some CDN-hosted assets (fonts in particular) reject direct, referrer-less
+ * requests with an HTML error page instead of the real file; this manager
+ * sends a Referer/User-Agent header to reduce that, and — critically —
+ * verifies the HTTP status and that the response's content-type is
+ * plausible for the asset type before embedding it, so a failed fetch is
+ * skipped rather than silently embedded as bogus/broken data.
+ *
  * Apps that load further content dynamically via JavaScript at runtime
  * (e.g. fetching exercise data from an API after the page has loaded)
  * cannot be captured this way; in that case Moodle falls back to embedding
  * the live external URL. This limitation is documented in the plugin
  * README.
+ *
+ * To avoid re-fetching (and re-embedding, at real bandwidth/time cost) the
+ * same LearningApps app for every course activity that happens to use it,
+ * successfully generated snapshots are also cached in a shared, site-level
+ * area tagged by the app's LearningApps id (extract_app_id()). Automatic
+ * generation (activity save, on-demand HTML download) reuses that shared
+ * cache when present; the explicit "store locally now" action always
+ * fetches fresh and refreshes the shared cache too.
  *
  * @package     mod_learningapp
  * @copyright   2026 lasjoh-toho
@@ -43,8 +59,11 @@ defined('MOODLE_INTERNAL') || die();
  */
 class storage_manager {
 
-    /** @var string file area used to store cached snapshots */
+    /** @var string file area used to store each activity's own snapshot */
     const FILEAREA = 'localstorage';
+
+    /** @var string file area used for the shared, app-id-tagged snapshot cache */
+    const APPCACHE_FILEAREA = 'appcache';
 
     /** @var int hard per-asset size cap in bytes, regardless of admin setting */
     const MAX_ASSET_BYTES = 6 * 1024 * 1024;
@@ -55,6 +74,10 @@ class storage_manager {
     /** @var int fallback total embed budget in MB if no admin setting is stored */
     const DEFAULT_MAX_TOTAL_MB = 15;
 
+    /** @var string realistic user agent, some CDNs reject requests without one */
+    const FETCH_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+        . '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Moodle-mod_learningapp';
+
     /**
      * Downloads the given LearningApps watch URL and stores a self-contained
      * local snapshot (nested show.php exercise inlined, images/audio/video/
@@ -64,20 +87,48 @@ class storage_manager {
      * @param int $instanceid learningapp instance id
      * @param string $watchurl canonical https://learningapps.org/watch?v=XXXXX URL
      * @param \context_module $context
+     * @param bool $forcerefresh if true, always fetches fresh instead of reusing
+     *                           the shared app-id-tagged cache, and refreshes
+     *                           that shared cache too
      * @return bool true on success, false if the download failed
      */
-    public static function store($instanceid, $watchurl, \context_module $context) {
+    public static function store($instanceid, $watchurl, \context_module $context, $forcerefresh = false) {
         global $CFG;
         require_once($CFG->libdir . '/filelib.php');
 
-        // Clear any previous snapshot first so stale files never linger.
+        // Clear any previous snapshot for this activity first so stale/broken
+        // files never linger, regardless of what happens below.
         self::purge($instanceid, $context);
+
+        $fs = get_file_storage();
+        $syscontext = \context_system::instance();
+        $appid = self::extract_app_id($watchurl);
+
+        // Dedup: reuse the shared, app-id-tagged snapshot if one already
+        // exists and a fresh fetch wasn't explicitly requested.
+        if (!$forcerefresh && $appid !== null) {
+            $shared = $fs->get_file($syscontext->id, 'mod_learningapp', self::APPCACHE_FILEAREA,
+                0, '/' . $appid . '/', 'snapshot.html');
+            if ($shared && !$shared->is_directory()) {
+                $fs->create_file_from_storedfile([
+                    'contextid' => $context->id,
+                    'component' => 'mod_learningapp',
+                    'filearea'  => self::FILEAREA,
+                    'itemid'    => $instanceid,
+                    'filepath'  => '/',
+                    'filename'  => 'snapshot.html',
+                ], $shared);
+                return true;
+            }
+        }
 
         $curl = new \curl();
         $curl->setopt([
             'CURLOPT_TIMEOUT' => 25,
             'CURLOPT_FOLLOWLOCATION' => true,
             'CURLOPT_MAXREDIRS' => 5,
+            'CURLOPT_USERAGENT' => self::FETCH_USER_AGENT,
+            'CURLOPT_REFERER' => $watchurl,
         ]);
         $html = $curl->get($watchurl);
         $info = $curl->get_info();
@@ -101,7 +152,6 @@ class storage_manager {
 
         $html = self::embed_assets($html, $budget, $watchurl, 0);
 
-        $fs = get_file_storage();
         $filerecord = [
             'contextid' => $context->id,
             'component' => 'mod_learningapp',
@@ -112,7 +162,37 @@ class storage_manager {
         ];
         $fs->create_file_from_string($filerecord, $html);
 
+        if ($appid !== null) {
+            $existingshared = $fs->get_file($syscontext->id, 'mod_learningapp', self::APPCACHE_FILEAREA,
+                0, '/' . $appid . '/', 'snapshot.html');
+            if ($existingshared) {
+                $existingshared->delete();
+            }
+            $fs->create_file_from_string([
+                'contextid' => $syscontext->id,
+                'component' => 'mod_learningapp',
+                'filearea'  => self::APPCACHE_FILEAREA,
+                'itemid'    => 0,
+                'filepath'  => '/' . $appid . '/',
+                'filename'  => 'snapshot.html',
+            ], $html);
+        }
+
         return true;
+    }
+
+    /**
+     * Extracts the LearningApps app id (the v= parameter) from a canonical
+     * watch URL, used to tag the shared dedup cache.
+     *
+     * @param string $watchurl
+     * @return string|null
+     */
+    protected static function extract_app_id($watchurl) {
+        if (preg_match('/[?&]v=([A-Za-z0-9]+)/', $watchurl, $m)) {
+            return $m[1];
+        }
+        return null;
     }
 
     /**
@@ -146,12 +226,6 @@ class storage_manager {
                 );
                 if ($newhtml !== null) {
                     $html = $newhtml;
-                    // Remove the bootstrap script (identified by its distinctive
-                    // "setURLs" function): its job was to reassign the iframe
-                    // src based on live network conditions, handle device
-                    // quirks, and ping an analytics endpoint — all pointless
-                    // (and the src-reassignment actively harmful) once we've
-                    // already set a working static src ourselves.
                     $stripped = preg_replace(
                         '#<script\b[^>]*>(?:(?!</script>).)*setURLs(?:(?!</script>).)*</script>#is',
                         '',
@@ -160,14 +234,6 @@ class storage_manager {
                     if ($stripped !== null) {
                         $html = $stripped;
                     }
-                    // Replace it with a minimal relay: LearningApps reports a
-                    // solved exercise via postMessage to its embedding page
-                    // (see https://learningapps.org/api). Depending on
-                    // whether the exercise engine targets window.parent (this
-                    // wrapper) or window.top directly, the message may or may
-                    // not already reach the real top-level page on its own;
-                    // this relay guarantees it does either way, without
-                    // depending on parsing/preserving LearningApps' own JS.
                     $relay = '<script>window.addEventListener("message",function(e){'
                         . 'if(window.parent&&window.parent!==window){window.parent.postMessage(e.data,"*");}'
                         . '});</script>';
@@ -183,7 +249,7 @@ class storage_manager {
         $html = preg_replace_callback(
             '#<link\b[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^"\']+)["\'][^>]*/?>#i',
             function($m) use ($budget, $baseurl) {
-                $css = self::fetch_text($m[1], $budget, $baseurl);
+                $css = self::fetch_text($m[1], $budget, $baseurl, 'text');
                 if ($css === null) {
                     return $m[0];
                 }
@@ -197,7 +263,7 @@ class storage_manager {
         $html = preg_replace_callback(
             '#<script\b((?:(?!src=)[^>])*)\bsrc=["\']([^"\']+)["\']([^>]*)>\s*</script>#i',
             function($m) use ($budget, $baseurl) {
-                $js = self::fetch_text($m[2], $budget, $baseurl);
+                $js = self::fetch_text($m[2], $budget, $baseurl, 'text');
                 if ($js === null) {
                     return $m[0];
                 }
@@ -207,12 +273,10 @@ class storage_manager {
         );
 
         // Step 3: embed images/media referenced via src=/poster= attributes as data URIs.
-        // (The nested show.php iframe's data: URI src, just written in step 0, is left alone
-        // since normalise_url() ignores data: URIs.)
         $html = preg_replace_callback(
             '#\b(src|poster)=["\']([^"\']+)["\']#i',
             function($m) use ($budget, $baseurl) {
-                $datauri = self::fetch_data_uri($m[2], $budget, $baseurl);
+                $datauri = self::fetch_data_uri($m[2], $budget, $baseurl, 'image');
                 if ($datauri === null) {
                     return $m[0];
                 }
@@ -235,6 +299,8 @@ class storage_manager {
 
     /**
      * Embeds url(...) references inside a block of CSS as data: URIs.
+     * font-face src="url(...)" fallbacks (woff/eot/ttf) are treated as font
+     * assets for the content-type plausibility check; anything else as image.
      *
      * @param string $css
      * @param \stdClass $budget
@@ -245,7 +311,8 @@ class storage_manager {
         return preg_replace_callback(
             '#url\(\s*[\'"]?([^\'")]+)[\'"]?\s*\)#i',
             function($m) use ($budget, $baseurl) {
-                $datauri = self::fetch_data_uri($m[1], $budget, $baseurl);
+                $expect = preg_match('/\.(woff2?|eot|ttf|otf)(\?|$)/i', $m[1]) ? 'font' : 'image';
+                $datauri = self::fetch_data_uri($m[1], $budget, $baseurl, $expect);
                 if ($datauri === null) {
                     return $m[0];
                 }
@@ -257,15 +324,16 @@ class storage_manager {
 
     /**
      * Fetches a URL's raw text content (for inlining scripts/stylesheets/the
-     * nested exercise document), honouring the shared size budget and a
-     * per-request cache.
+     * nested exercise document), honouring the shared size budget, a
+     * per-request cache, and rejecting failed/implausible responses.
      *
      * @param string $url
      * @param \stdClass $budget
      * @param string $baseurl used to resolve $url if it is relative
+     * @param string $expect 'text' (html/js/css) — used for the plausibility check
      * @return string|null null if the URL could not/should not be fetched
      */
-    protected static function fetch_text($url, \stdClass $budget, $baseurl) {
+    protected static function fetch_text($url, \stdClass $budget, $baseurl, $expect = 'text') {
         $url = self::normalise_url($url, $baseurl);
         if ($url === null) {
             return null;
@@ -277,8 +345,11 @@ class storage_manager {
             return null;
         }
 
+        $budget->curl->setopt(['CURLOPT_REFERER' => $baseurl]);
         $content = $budget->curl->get($url);
-        if ($budget->curl->get_errno() || $content === '' || $content === false) {
+        $info = $budget->curl->get_info();
+
+        if (!self::response_is_usable($budget->curl, $info, $content, $url, $expect)) {
             $budget->seen[$url] = ['text' => null, 'datauri' => null];
             return null;
         }
@@ -296,14 +367,17 @@ class storage_manager {
 
     /**
      * Fetches a URL and returns it as a base64 data: URI, honouring the
-     * shared size budget and a per-request cache.
+     * shared size budget, a per-request cache, and rejecting failed/
+     * implausible responses (e.g. an HTML error page returned instead of
+     * the requested image/font, which some CDNs do with a 200 status).
      *
      * @param string $url
      * @param \stdClass $budget
      * @param string $baseurl used to resolve $url if it is relative
+     * @param string $expect 'image' or 'font' — used for the plausibility check
      * @return string|null null if the URL could not/should not be embedded
      */
-    protected static function fetch_data_uri($url, \stdClass $budget, $baseurl) {
+    protected static function fetch_data_uri($url, \stdClass $budget, $baseurl, $expect = 'image') {
         $url = self::normalise_url($url, $baseurl);
         if ($url === null) {
             return null;
@@ -315,9 +389,11 @@ class storage_manager {
             return null;
         }
 
+        $budget->curl->setopt(['CURLOPT_REFERER' => $baseurl]);
         $content = $budget->curl->get($url);
         $info = $budget->curl->get_info();
-        if ($budget->curl->get_errno() || $content === '' || $content === false) {
+
+        if (!self::response_is_usable($budget->curl, $info, $content, $url, $expect)) {
             $budget->seen[$url] = ['text' => null, 'datauri' => null];
             return null;
         }
@@ -328,8 +404,7 @@ class storage_manager {
             return null;
         }
 
-        $mime = $info['content_type'] ?? '';
-        $mime = trim(explode(';', $mime)[0] ?? '');
+        $mime = trim(explode(';', $info['content_type'] ?? '')[0] ?? '');
         if (empty($mime) || $mime === 'application/octet-stream') {
             $mime = self::guess_mime_from_extension($url);
         }
@@ -338,6 +413,46 @@ class storage_manager {
         $datauri = 'data:' . $mime . ';base64,' . base64_encode($content);
         $budget->seen[$url] = ['text' => null, 'datauri' => $datauri];
         return $datauri;
+    }
+
+    /**
+     * Decides whether a fetched sub-resource response is genuinely usable,
+     * rather than a network error or a "soft failure" (some CDNs answer a
+     * blocked/hotlink-protected or missing asset request with HTTP 200 and
+     * an HTML error page instead of a proper 4xx/5xx status). Embedding such
+     * a response would silently corrupt the surrounding HTML/CSS with a
+     * plausible-looking but useless data: URI.
+     *
+     * @param \curl $curl
+     * @param array $info curl_getinfo() result for the request just made
+     * @param mixed $content the fetched body
+     * @param string $url the (already normalised) URL that was fetched, for logging
+     * @param string $expect 'text', 'image' or 'font' — what kind of asset this should be
+     * @return bool
+     */
+    protected static function response_is_usable(\curl $curl, array $info, $content, $url, $expect) {
+        if ($curl->get_errno() || $content === '' || $content === false) {
+            return false;
+        }
+        $httpcode = (int)($info['http_code'] ?? 0);
+        if ($httpcode >= 400 || $httpcode === 0) {
+            debugging('mod_learningapp: sub-resource fetch failed (HTTP ' . $httpcode . ') for ' . $url,
+                DEBUG_DEVELOPER);
+            return false;
+        }
+
+        $contenttype = strtolower(trim(explode(';', $info['content_type'] ?? '')[0] ?? ''));
+        if (($expect === 'image' || $expect === 'font')
+                && ($contenttype === 'text/html' || $contenttype === '')
+                && preg_match('/^\s*<(!DOCTYPE|html)/i', (string)$content)) {
+            // A binary asset request that actually came back as an HTML
+            // document is virtually always an error/blocked-access page,
+            // even with a 200 status — never a real image or font.
+            debugging('mod_learningapp: expected ' . $expect . ' but got HTML for ' . $url, DEBUG_DEVELOPER);
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -365,7 +480,6 @@ class storage_manager {
             return $url;
         }
 
-        // Relative (absolute-path "/x/y" or document-relative "x/y") — resolve against $baseurl.
         $base = @parse_url($baseurl);
         if (empty($base['host'])) {
             return null;
@@ -399,6 +513,7 @@ class storage_manager {
             'mp3' => 'audio/mpeg', 'wav' => 'audio/wav', 'ogg' => 'audio/ogg', 'oga' => 'audio/ogg',
             'mp4' => 'video/mp4', 'webm' => 'video/webm', 'ogv' => 'video/ogg',
             'woff' => 'font/woff', 'woff2' => 'font/woff2', 'ttf' => 'font/ttf', 'otf' => 'font/otf',
+            'eot' => 'application/vnd.ms-fontobject',
             'css' => 'text/css', 'js' => 'application/javascript', 'json' => 'application/json',
         ];
         return $map[$ext] ?? 'application/octet-stream';
@@ -447,7 +562,9 @@ class storage_manager {
     }
 
     /**
-     * Deletes all locally cached files for an instance.
+     * Deletes all locally cached files for an instance (does not touch the
+     * shared app-id-tagged cache, which is intentionally kept for reuse by
+     * other activities/courses).
      *
      * @param int $instanceid
      * @param \context_module $context

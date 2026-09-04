@@ -42,11 +42,18 @@ $string['grademaxpositive'] = 'Die maximale Punktzahl muss größer als 0 sein.'
 $string['storelocally'] = 'App-Daten lokal in Moodle speichern';
 $string['storelocally_help'] = 'Wenn aktiviert, lädt Moodle die Inhalte der App einmalig herunter und speichert eine lokale, in sich geschlossene Kopie im Dateisystem des Kurses: Bilder, Audio, Video und Schriftarten werden dabei direkt eingebettet, Skripte und Stylesheets inline übernommen. So bleibt die App auch bei Änderungen oder Ausfällen von learningapps.org im Kurs nutzbar. Hinweis: Sehr dynamische Apps, die Inhalte erst zur Laufzeit per JavaScript nachladen, können unter Umständen nicht vollständig offline dargestellt werden; in diesem Fall wird automatisch wieder die externe Quelle eingebunden.';
 $string['usinglocalcopy'] = 'Diese Aktivität wird aus einer lokal gespeicherten, eigenständigen Kopie (inkl. eingebetteter Bilder/Mediendateien) angezeigt.';
+$string['localcopysize'] = 'Größe: {$a}';
 $string['localstoragemaxsize'] = 'Maximale Größe eingebetteter Medien (MB)';
 $string['localstoragemaxsize_desc'] = 'Obergrenze in Megabyte für die Gesamtgröße der Bilder, Audio-, Video- und Schriftdateien, die pro Aktivität in den lokalen Schnappschuss eingebettet werden. Größere oder darüber hinausgehende Ressourcen werden übersprungen und bleiben als externer Link erhalten.';
 
 $string['enablelocalstorage'] = 'Lokale Wiederverwendung erlauben';
-$string['enablelocalstorage_desc'] = 'Erlaubt Lehrkräften, beim Anlegen einer LearningApp-Aktivität die Option "App-Daten lokal in Moodle speichern" zu nutzen.';
+$string['enablelocalstorage_desc'] = 'Erlaubt Lehrkräften, beim Anlegen einer LearningApp-Aktivität die Option "App-Daten lokal in Moodle speichern" zu nutzen, sowie den "Lokal speichern"-Button im Player zu verwenden.';
+
+$string['storelocallybutton'] = 'Lokal speichern';
+$string['localstoragedisabled'] = 'Die lokale Speicherung wurde vom Administrator/von der Administratorin für diese Website nicht freigegeben.';
+$string['storelocallysuccess'] = 'App erfolgreich lokal gespeichert (Größe: {$a}).';
+$string['storelocallyfailed'] = 'Die App konnte nicht lokal gespeichert werden. Bitte versuchen Sie es später erneut.';
+$string['learningapp:storelocally'] = 'LearningApp-Aktivität manuell lokal speichern/aktualisieren';
 
 $string['enablehtmldownload'] = 'HTML-Download erlauben';
 $string['enablehtmldownload_desc'] = 'Erlaubt Lehrkräften (und weiteren Nutzer:innen mit der Fähigkeit mod/learningapp:downloadhtml), die Aktivität als eigenständige HTML-Datei herunterzuladen. Nutzt bei Bedarf denselben lokalen Schnappschuss-Mechanismus wie "Lokale Wiederverwendung" – siehe README für dessen Einschränkungen bei dynamischen Apps.';

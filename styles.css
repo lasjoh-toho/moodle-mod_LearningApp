@@ -5,7 +5,8 @@
     flex-wrap: wrap;
 }
 
-.mod-learningapp-page .la-download-html {
+.mod-learningapp-page .la-download-html,
+.mod-learningapp-page .la-store-locally {
     text-decoration: none;
 }
 
@@ -26,7 +27,6 @@
 
 .mod-learningapp-page .learningapp-frame-wrap {
     width: 100%;
-    transition: transform 0.15s ease-in-out;
 }
 
 .mod-learningapp-page .learningapp-frame {

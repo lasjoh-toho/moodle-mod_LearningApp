@@ -6,17 +6,13 @@
 // (at your option) any later version.
 
 /**
- * Player controls (fullscreen, zoom) and AJAX completion submission for mod_learningapp.
+ * Player controls (fullscreen) and AJAX completion submission for mod_learningapp.
  *
  * @module     mod_learningapp/player
  * @copyright  2026 lasjoh-toho
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 define([], function() {
-
-    var ZOOM_STEP = 0.1;
-    var ZOOM_MIN = 0.5;
-    var ZOOM_MAX = 2.0;
 
     /**
      * Initialise the player controls.
@@ -25,44 +21,9 @@ define([], function() {
      */
     var init = function(params) {
         var container = document.getElementById('learningapp-container');
-        var frameWrap = document.getElementById('learningapp-frame-wrap');
-        var zoomResetBtn = document.querySelector('.la-zoom-reset');
-        var zoomInBtn = document.querySelector('.la-zoom-in');
-        var zoomOutBtn = document.querySelector('.la-zoom-out');
         var fullscreenBtn = document.querySelector('.la-fullscreen');
         var submitBtn = document.getElementById('learningapp-submit');
         var feedback = document.getElementById('learningapp-submit-feedback');
-
-        var scale = 1.0;
-
-        var applyZoom = function() {
-            if (frameWrap) {
-                frameWrap.style.transform = 'scale(' + scale + ')';
-                frameWrap.style.transformOrigin = 'top left';
-            }
-            if (zoomResetBtn) {
-                zoomResetBtn.textContent = Math.round(scale * 100) + '%';
-            }
-        };
-
-        if (zoomInBtn) {
-            zoomInBtn.addEventListener('click', function() {
-                scale = Math.min(ZOOM_MAX, parseFloat((scale + ZOOM_STEP).toFixed(2)));
-                applyZoom();
-            });
-        }
-        if (zoomOutBtn) {
-            zoomOutBtn.addEventListener('click', function() {
-                scale = Math.max(ZOOM_MIN, parseFloat((scale - ZOOM_STEP).toFixed(2)));
-                applyZoom();
-            });
-        }
-        if (zoomResetBtn) {
-            zoomResetBtn.addEventListener('click', function() {
-                scale = 1.0;
-                applyZoom();
-            });
-        }
 
         if (fullscreenBtn && container) {
             fullscreenBtn.addEventListener('click', function() {
