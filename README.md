@@ -58,11 +58,23 @@ Vollbild-/Zoom-Player und Anbindung an das Moodle-Notenbuch.
   einzubetten. Der manuelle „Lokal speichern“-Button erzwingt dagegen
   immer einen frischen Abruf und aktualisiert diesen geteilten Cache.
 
+  **Laufzeit-Übungsdaten:** Die eigentlichen Übungsinhalte (Bilder,
+  Reihenfolge, Texte) sind bei vielen App-Typen nicht Teil des
+  statischen HTML, sondern werden beim Start per synchronem
+  `XMLHttpRequest` von `learningapps.org/data?id=…` nachgeladen — ohne
+  Netzwerkzugriff bliebe die App sonst dauerhaft bei ihrem Lade-Spinner
+  hängen. Der Storage-Manager lädt diese Antwort deshalb serverseitig
+  mit und injiziert einen kleinen `XMLHttpRequest`-Shim in das
+  verschachtelte Dokument, der genau diese eine Anfrage abfängt und die
+  mitgelieferten Daten zurückgibt (`inject_data_shim()`), sowohl für
+  synchrone als auch asynchrone Anfragen.
+
   > **Hinweis:** learningapps.org bietet keine offizielle Export-Schnittstelle.
-  > Der lokale Schnappschuss ist ein Best-Effort-Mirror: Bilder/Medien/CSS/JS,
-  > die direkt im HTML referenziert werden (inkl. einer Verschachtelungsebene),
-  > werden eingebettet. Stark dynamische Apps, die Inhalte erst zur Laufzeit
-  > per JavaScript vom Server nachladen (z. B. Übungsdaten per API-Aufruf),
+  > Der lokale Schnappschuss ist ein Best-Effort-Mirror: Bilder/Medien/CSS/JS
+  > sowie der eine bekannte Laufzeit-Datenendpunkt werden eingebettet. Andere,
+  > bisher nicht beobachtete dynamische Nachladevorgänge einzelner App-Typen
+  > lassen sich damit weiterhin nicht erfassen — in diesem Fall bindet das
+  > Modul automatisch wieder die externe Quelle ein.
   > lassen sich damit nicht vollständig offline darstellen — in diesem Fall
   > bindet das Modul automatisch wieder die externe Quelle ein.
 - **Player mit Vollbild**: `view.php` rendert die App in einem responsiven

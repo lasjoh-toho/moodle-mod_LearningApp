@@ -196,6 +196,19 @@ class storage_manager {
     }
 
     /**
+     * Extracts the LearningApps app id from a show.php?id=XXXXX URL.
+     *
+     * @param string $showurl
+     * @return string|null
+     */
+    protected static function extract_show_id($showurl) {
+        if (preg_match('/[?&]id=([A-Za-z0-9]+)/', $showurl, $m)) {
+            return $m[1];
+        }
+        return null;
+    }
+
+    /**
      * Rewrites external stylesheets/scripts into inline content and
      * external images/media into base64 data: URIs, so the resulting HTML
      * is as self-contained as possible within the configured size budget.
@@ -294,7 +307,98 @@ class storage_manager {
             $html
         );
 
+        // Step 5 (nested exercise document only): LearningApps' actual
+        // exercise content (images, texts, correct order, ...) is not part
+        // of the static HTML at all — it is loaded at runtime via a
+        // synchronous XMLHttpRequest to learningapps.org/data?id=XXXXX
+        // (a "loading..." spinner is shown until that request completes).
+        // We cannot execute that request for real once embedded (no
+        // network, and a data: URI has no meaningful origin to authenticate
+        // as), so we fetch it ourselves at snapshot-generation time and
+        // inject a small XMLHttpRequest shim that intercepts any request to
+        // that URL and returns our pre-fetched content immediately — for
+        // both synchronous and asynchronous request styles, matching how a
+        // real XHR completes in each case.
+        if ($depth === 1) {
+            $html = self::inject_data_shim($html, $budget, $baseurl);
+        }
+
         return $html;
+    }
+
+    /**
+     * Pre-fetches LearningApps' runtime exercise-data endpoint
+     * (learningapps.org/data?id=XXXXX) and injects an XMLHttpRequest shim
+     * so the nested exercise document can load it without a real network
+     * request. See the embed_assets() step 5 docblock above for why this is
+     * necessary. No-op (returns $html unchanged) if the app id can't be
+     * determined from $baseurl or the data fetch fails/looks implausible.
+     *
+     * @param string $html the nested exercise document's HTML so far
+     * @param \stdClass $budget
+     * @param string $baseurl the show.php?id=XXXXX URL this document came from
+     * @return string
+     */
+    protected static function inject_data_shim($html, \stdClass $budget, $baseurl) {
+        $appid = self::extract_show_id($baseurl);
+        if ($appid === null) {
+            return $html;
+        }
+
+        $dataurl = 'https://learningapps.org/data?id=' . $appid;
+        $data = self::fetch_text($dataurl, $budget, $baseurl, 'text');
+        if ($data === null) {
+            return $html;
+        }
+
+        $shim = '<script>(function(){'
+            . 'var LA_B64=' . json_encode(base64_encode($data)) . ';'
+            . 'var LA_DATA;'
+            . 'try{'
+            . 'var bin=atob(LA_B64);var bytes=new Uint8Array(bin.length);'
+            . 'for(var i=0;i<bin.length;i++){bytes[i]=bin.charCodeAt(i);}'
+            . 'LA_DATA=new TextDecoder("utf-8").decode(bytes);'
+            . '}catch(e){LA_DATA=atob(LA_B64);}'
+            . 'var MARK="learningapps.org/data?id=";'
+            . 'var OrigXHR=window.XMLHttpRequest;'
+            . 'function ShimXHR(){this._real=new OrigXHR();this._embedded=false;this._async=true;}'
+            . 'var p=ShimXHR.prototype;'
+            . 'p.open=function(method,url,async){'
+            . 'this._embedded=(typeof url==="string"&&url.indexOf(MARK)!==-1);'
+            . 'this._async=(async===undefined)?true:!!async;'
+            . 'if(!this._embedded){return this._real.open.apply(this._real,arguments);}'
+            . '};'
+            . 'p.setRequestHeader=function(){if(!this._embedded&&this._real){return this._real.setRequestHeader.apply(this._real,arguments);}};'
+            . 'p.send=function(){'
+            . 'var self=this;'
+            . 'if(this._embedded){'
+            . 'var deliver=function(){'
+            . 'self.status=200;self.readyState=4;'
+            . 'self.responseText=LA_DATA;self.response=LA_DATA;'
+            . 'if(typeof self.onreadystatechange==="function"){self.onreadystatechange();}'
+            . 'if(typeof self.onload==="function"){self.onload();}'
+            . '};'
+            . 'if(this._async){setTimeout(deliver,0);}else{deliver();}'
+            . 'return;'
+            . '}'
+            . 'return this._real.send.apply(this._real,arguments);'
+            . '};'
+            . '["abort","getResponseHeader","getAllResponseHeaders","overrideMimeType"].forEach(function(m){'
+            . 'p[m]=function(){if(this._real){return this._real[m].apply(this._real,arguments);}};'
+            . '});'
+            . 'window.XMLHttpRequest=ShimXHR;'
+            . '})();</script>';
+
+        $withshim = preg_replace('#<head\b[^>]*>#i', '$0' . $shim, $html, 1);
+        if ($withshim !== null && $withshim !== $html) {
+            return $withshim;
+        }
+        // No <head> tag found — fall back to prepending right after <html>, or at the very start.
+        $withshim = preg_replace('#<html\b[^>]*>#i', '$0' . $shim, $html, 1);
+        if ($withshim !== null && $withshim !== $html) {
+            return $withshim;
+        }
+        return $shim . $html;
     }
 
     /**
